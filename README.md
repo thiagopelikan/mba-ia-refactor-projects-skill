@@ -436,6 +436,64 @@ A skill deve atingir os seguintes mínimos em **todos os 3 projetos**:
 
 ---
 
+## Análise Manual
+
+Antes de construir a skill `refactor-arch`, os três projetos legados foram lidos manualmente, arquivo por arquivo, para levantar os anti-patterns de arquitetura, segurança e qualidade que a skill precisaria detectar e corrigir. A seguir estão os achados por projeto (arquivo:linha reais), classificados conforme a escala de severidade definida na seção [Definição de Severidades](#definição-de-severidades).
+
+### Projeto 1 — code-smells-project (Python/Flask 3.1.1, SQLite, E-commerce)
+
+| # | Anti-pattern | Local (arquivo:linha) | Severidade | Por que é relevante |
+|---|---|---|---|---|
+| 1 | Arbitrary SQL Execution | `app.py:59-78` | CRITICAL | `POST /admin/query` executa qualquer SQL vindo do body sem autenticação — equivale a um shell direto no banco (DROP de tabelas, SELECT de senhas, etc.). |
+| 2 | SQL Injection por concatenação | `models.py:105-120` | CRITICAL | Queries montadas com `+` (ex.: `"... WHERE email='"+email+"'"` no login) permitem bypass de autenticação com payloads como `' OR '1'='1`. |
+| 3 | Senha em texto plano + exposta | `database.py:31,75-83`, `models.py:83,99` | CRITICAL | Coluna `senha` armazenada sem hash e `GET /usuarios` devolve a senha de todos os usuários na resposta JSON. |
+| 4 | Endpoint destrutivo sem autenticação | `app.py:47-57` | CRITICAL | `POST /admin/reset-db` apaga todas as tabelas do banco sem exigir nenhuma credencial. |
+| 5 | God Module | `models.py:1-315` | CRITICAL | Um único arquivo concentra acesso a dados, regra de negócio e serialização de 4 domínios (produtos, usuários, pedidos, itens), tornando testes isolados inviáveis. |
+| 6 | Estado global thread-unsafe | `database.py:4-10` | HIGH | Conexão singleton com `check_same_thread=False` é compartilhada entre requisições concorrentes, gerando corrupção de dados em produção. |
+| 7 | `debug=True` + bind público + CORS aberto | `app.py:88`, `app.py:9` | HIGH | Debug mode exposto em `0.0.0.0` habilita o Werkzeug debugger (RCE conhecido) e `CORS(app)` sem restrição libera qualquer origem. |
+| 8 | N+1 Query tripla | `models.py:171-233` (`192`, `224`) | MEDIUM | Busca de pedidos dispara uma query por pedido e outra por item/produto dentro de loops, degradando performance conforme o volume cresce. |
+| 9 | Validação de tipo ausente | `controllers.py:39-46` | MEDIUM | `preco` recebido como string sem validação derruba o endpoint com erro 500 em vez de retornar 400. |
+| 10 | Magic numbers/strings | `models.py:257-262`, `app.py:88` | LOW | Faixas de desconto (`10000`/`5000`/`1000`) e porta hardcoded sem constantes nomeadas dificultam manutenção. |
+| 11 | `print()` como logging (com PII) | `controllers.py:179` | LOW | Dados de login são impressos no console em vez de usar um logger estruturado, vazando PII em qualquer ambiente. |
+
+### Projeto 2 — ecommerce-api-legacy (Node.js/Express 4.18.2, SQLite in-memory, LMS com checkout)
+
+| # | Anti-pattern | Local (arquivo:linha) | Severidade | Por que é relevante |
+|---|---|---|---|---|
+| 1 | Credenciais de produção hardcoded | `src/utils.js:1-7` | CRITICAL | Senha de banco, chave de gateway de pagamento (`pk_live_...`) e usuário SMTP ficam expostos em texto plano no código-fonte versionado. |
+| 2 | Log de PAN de cartão + chave de gateway | `AppManager.js:45` | CRITICAL | `console.log` imprime o número completo do cartão junto com a chave secreta do gateway a cada checkout — violação direta de PCI-DSS. |
+| 3 | Hash caseiro reversível | `src/utils.js:17-23` | CRITICAL | `badCrypto` usa Base64 repetido sem salt, dando falsa sensação de segurança para senhas que na prática são trivialmente reversíveis. |
+| 4 | God Class `AppManager` | `AppManager.js:4-141` | CRITICAL | Uma única classe mistura conexão de banco, DDL, seed de dados, definição de rotas, regra de pagamento e serialização — nenhuma camada isolada. |
+| 5 | Endpoints admin/destrutivos sem autenticação | `AppManager.js:80,131` | CRITICAL | `GET /api/admin/financial-report` e `DELETE /api/users/:id` não verificam identidade nem papel do requisitante. |
+| 6 | Estado global mutável / memory leak | `src/utils.js:9-10`, `utils.js:10,25` | HIGH | `globalCache` e `totalRevenue` são compartilhados entre requisições e crescem sem limite; além disso `totalRevenue` é exportado por valor e nunca reflete atualizações (bug funcional). |
+| 7 | Callback hell (5 níveis) | `AppManager.js:37-77` | HIGH | Checkout aninha 5 callbacks de banco, tornando o fluxo de erro incompleto e o código difícil de testar e manter. |
+| 8 | Checkout sem transação | `AppManager.js:50-62` | HIGH | Falha após a matrícula mas antes do pagamento deixa o aluno inscrito sem cobrança — sem `BEGIN/COMMIT/ROLLBACK` para garantir atomicidade. |
+| 9 | N+1 Query no relatório financeiro | `AppManager.js:83-126` | MEDIUM | Relatório itera resultados e dispara uma query adicional por linha em vez de usar JOIN, penalizando performance conforme os dados crescem. |
+| 10 | Sem hardening HTTP básico | `src/app.js:6`, `AppManager.js:7` | MEDIUM | `express.json()` sem limite de tamanho, ausência de `helmet`/rate-limit, e banco `:memory:` hardcoded no construtor da classe. |
+| 11 | Nomenclatura ruim | `AppManager.js:29-33` | LOW | Variáveis como `u, e, p, cid, cc` no handler de checkout escondem o significado dos dados e dificultam a leitura do fluxo de pagamento. |
+| 12 | `console.log` como logging + magic number | `utils.js:19`, `AppManager.js:45` | LOW | `console.log` substitui um logger estruturado em toda a aplicação e `10000` aparece como magic number no cálculo de cache sem constante nomeada. |
+
+### Projeto 3 — task-manager-api (Python/Flask 3.0.0 + SQLAlchemy, SQLite, Task Manager)
+
+| # | Anti-pattern | Local (arquivo:linha) | Severidade | Por que é relevante |
+|---|---|---|---|---|
+| 1 | MD5 sem salt para senha | `models/user.py:29,32` | CRITICAL | `set_password`/`check_password` usam `hashlib.md5`, um algoritmo quebrado e sem salt — senhas viram alvo fácil de rainbow tables. |
+| 2 | Hash de senha devolvido pela API | `models/user.py:21`, `routes/user_routes.py:209` | CRITICAL | `to_dict()` inclui o campo `password` e essa serialização é usada até na resposta de `POST /login`, vazando o hash da senha ao cliente. |
+| 3 | Credenciais SMTP hardcoded | `services/notification_service.py:7-10` | CRITICAL | Usuário e senha de e-mail ficam fixos no código-fonte, expostos a qualquer pessoa com acesso ao repositório. |
+| 4 | Token de autenticação falso e previsível | `routes/user_routes.py:210` | CRITICAL | O "token" é literalmente `'fake-jwt-token-' + id`, sem assinatura nem verificação — qualquer rota autenticada pode ser forjada trivialmente. |
+| 5 | `debug=True` + bind público + CORS aberto | `app.py:34`, `app.py:15` | HIGH | Mesma exposição de RCE via debugger do Werkzeug e CORS sem restrição de origem em ambiente que já roda com SQLAlchemy em produção. |
+| 6 | Lógica de negócio no controller (God Method) | `routes/report_routes.py:12-101` | HIGH | Endpoint de relatório concentra ~90 linhas de agregação e regra de negócio dentro da rota, sem nenhuma camada de serviço. |
+| 7 | Código morto significativo | `services/notification_service.py:1-48`, `utils/helpers.py` | HIGH | `NotificationService` nunca é importado/usado e `utils/helpers.py` duplica validação que também nunca é chamada — sinal de camadas que existem só no nome. |
+| 8 | `db.create_all()` no import do módulo | `app.py:30-31` | HIGH | Efeito colateral de criação de schema disparado só por importar `app.py`, dificultando testes e controle de migrations. |
+| 9 | API deprecated `datetime.utcnow()` | `models/task.py:15`, `routes/report_routes.py:35` (22 ocorrências) | MEDIUM | `utcnow()` está deprecado desde Python 3.12 e retorna datetime naive; o substituto é `datetime.now(timezone.utc)`. |
+| 10 | API deprecated `Model.query.get()` | `routes/task_routes.py:42,67` (16 ocorrências) | MEDIUM | Padrão legado do SQLAlchemy 1.x; a API atual recomenda `db.session.get(Model, id)`. |
+| 11 | N+1 Query em `GET /tasks` | `routes/task_routes.py:41-57` | MEDIUM | Para cada task busca `User.query.get()` e `Category.query.get()` individualmente em vez de usar `join`/`joinedload`. |
+| 12 | `except:` nu engolindo erros | `routes/task_routes.py:62-63` (8 ocorrências no projeto) | MEDIUM | Captura genérica sem logar nem re-lançar mascara falhas reais (ex.: erro de banco vira resposta silenciosa incorreta). |
+| 13 | Dependências declaradas e não usadas | `requirements.txt:4-6` | LOW | `marshmallow`, `requests` e `python-dotenv` estão no requirements mas nunca são importados, inflando a superfície de dependências. |
+| 14 | Validação fraca e duplicada | `routes/user_routes.py:61-65` | LOW | Senha aceita com menos de 4 caracteres e regex de e-mail simplista repetida em múltiplos pontos em vez de centralizada. |
+
+---
+
 ## Dicas Finais
 
 - **Comece pela análise manual** — entender os problemas profundamente é essencial para criar uma skill que os detecte.
