@@ -1,0 +1,14 @@
+# Ambiente virtual
+.venv/
+venv/
+
+# Bytecode
+__pycache__/
+*.pyc
+
+# Banco local
+*.db
+instance/
+
+# Configuração local com secrets
+.env
