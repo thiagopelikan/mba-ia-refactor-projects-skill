@@ -6,7 +6,7 @@ Stack:   Python + Flask 3.1.1 (SQLite via sqlite3, SQL cru)
 Files:   4 analyzed | ~780 lines of code (app.py 88, controllers.py 292, models.py 314, database.py 86)
 
 ## Summary
-CRITICAL: 11 | HIGH: 8 | MEDIUM: 7 | LOW: 4
+CRITICAL: 11 | HIGH: 7 | MEDIUM: 7 | LOW: 4
 
 ## Findings
 
@@ -185,7 +185,7 @@ Impact: Sem níveis/estrutura/timestamps; polui stdout; dados de usuário em log
 Recommendation: Aplicar RP-15/RP-08 — trocar por `logging` estruturado e centralizar o log de erros no middleware de erro.
 
 ================================
-Total: 30 findings
+Total: 29 findings
 ================================
 
 ---

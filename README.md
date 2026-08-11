@@ -559,7 +559,7 @@ Para a Fase 3, o `references/refactoring-playbook.md` traz **15 padrões de tran
 
 | Projeto | Stack | Findings | Distribuição |
 |---|---|---|---|
-| 1 — code-smells-project | Python/Flask 3.1.1 (SQLite, SQL cru) | 30 | 11 CRITICAL / 8 HIGH / 7 MEDIUM / 4 LOW |
+| 1 — code-smells-project | Python/Flask 3.1.1 (SQLite, SQL cru) | 29 | 11 CRITICAL / 7 HIGH / 7 MEDIUM / 4 LOW |
 | 2 — ecommerce-api-legacy | Node/Express 4.18.2 (SQLite `:memory:`) | 21 | 6 CRITICAL / 7 HIGH / 5 MEDIUM / 3 LOW |
 | 3 — task-manager-api | Python/Flask 3.0.0 + SQLAlchemy | 26 | 6 CRITICAL / 5 HIGH / 9 MEDIUM / 6 LOW |
 
@@ -649,7 +649,7 @@ Principais correções: MD5 → hash `werkzeug.security`, senha removida das res
 - [x] Relatório segue o template definido nos arquivos de referência
 - [x] Cada finding tem arquivo e linhas exatos
 - [x] Findings ordenados por severidade (CRITICAL → LOW)
-- [x] Mínimo de 5 findings identificados — 30 findings
+- [x] Mínimo de 5 findings identificados — 29 findings
 - [x] Detecção de APIs deprecated incluída (se aplicável) — verificado; stack sem ORM/datetime não acusou ocorrências de AP-12 relevantes
 - [x] Skill pausa e pede confirmação antes da Fase 3 — prompt `[y/n]` exibido e respeitado
 

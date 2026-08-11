@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checklist de Validação — refactor-arch</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --border:#e3e6ea;
+    --text:#1a1d21; --muted:#5b636d; --accent:#2f6fed;
+    --pass-bg:#e5f6ec; --pass-fg:#1a7f43; --pass-bd:#a8ddbd;
+    --fix-bg:#fff3d6; --fix-fg:#8a6100; --fix-bd:#f0d491;
+    --fail-bg:#fbe4e4; --fail-fg:#b42318; --fail-bd:#f0b4ae;
+    --na-bg:#eceff3; --na-fg:#5b636d; --na-bd:#d6dae0;
+    --crit:#b42318; --high:#c2410c; --med:#8a6100; --low:#3567b3;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1216; --surface:#171b21; --surface-2:#1e242c; --border:#2a313a;
+      --text:#e7eaee; --muted:#9aa4b0; --accent:#5b8df6;
+      --pass-bg:#12351f; --pass-fg:#5cd88a; --pass-bd:#1f5a34;
+      --fix-bg:#3a2e0e; --fix-fg:#e8c265; --fix-bd:#5c4a1a;
+      --fail-bg:#3a1815; --fail-fg:#f0938a; --fail-bd:#5c2722;
+      --na-bg:#232a32; --na-fg:#9aa4b0; --na-bd:#333c46;
+      --crit:#f0938a; --high:#f0a878; --med:#e8c265; --low:#8fb4f0;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1216; --surface:#171b21; --surface-2:#1e242c; --border:#2a313a;
+    --text:#e7eaee; --muted:#9aa4b0; --accent:#5b8df6;
+    --pass-bg:#12351f; --pass-fg:#5cd88a; --pass-bd:#1f5a34;
+    --fix-bg:#3a2e0e; --fix-fg:#e8c265; --fix-bd:#5c4a1a;
+    --fail-bg:#3a1815; --fail-fg:#f0938a; --fail-bd:#5c2722;
+    --na-bg:#232a32; --na-fg:#9aa4b0; --na-bd:#333c46;
+    --crit:#f0938a; --high:#f0a878; --med:#e8c265; --low:#8fb4f0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;padding:2rem 1rem;}
+  .wrap{max-width:1080px;margin:0 auto}
+  header.page{margin-bottom:1.5rem}
+  h1{font-size:1.6rem;margin:0 0 .3rem}
+  .sub{color:var(--muted);font-size:.95rem}
+  .tiles{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.25rem 0 2rem}
+  .tile{flex:1 1 150px;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:1rem 1.1rem}
+  .tile .n{font-size:1.8rem;font-weight:700;line-height:1}
+  .tile .l{color:var(--muted);font-size:.82rem;margin-top:.35rem}
+  .tile.ok .n{color:var(--pass-fg)}
+  .legend{display:flex;flex-wrap:wrap;gap:.6rem;margin:-.5rem 0 2rem;font-size:.82rem;color:var(--muted)}
+  section.proj{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:1.25rem 1.25rem .5rem;margin-bottom:1.75rem;overflow:hidden}
+  .phead{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem .9rem;margin-bottom:.25rem}
+  .phead h2{font-size:1.2rem;margin:0}
+  .stack{color:var(--muted);font-size:.9rem}
+  .counts{margin:.4rem 0 1rem;font-size:.86rem;color:var(--muted)}
+  .counts b{color:var(--text)}
+  .sev{font-weight:600}
+  .sev.c{color:var(--crit)} .sev.h{color:var(--high)} .sev.m{color:var(--med)} .sev.l{color:var(--low)}
+  .tbl-scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;min-width:640px}
+  th,td{text-align:left;padding:.55rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.74rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600;
+    position:sticky;top:0;background:var(--surface)}
+  tr:last-child td{border-bottom:none}
+  td.num{color:var(--muted);font-variant-numeric:tabular-nums;width:2.2rem}
+  td.item{font-weight:500;width:24%}
+  td.ev{color:var(--muted);font-size:.83rem}
+  .fase{display:inline-block;font-size:.72rem;color:var(--muted);border:1px solid var(--border);
+    border-radius:5px;padding:.05rem .4rem;margin-top:.15rem}
+  .badge{display:inline-block;font-size:.72rem;font-weight:700;border-radius:6px;padding:.15rem .5rem;
+    white-space:nowrap;border:1px solid}
+  .badge.pass{background:var(--pass-bg);color:var(--pass-fg);border-color:var(--pass-bd)}
+  .badge.fix{background:var(--fix-bg);color:var(--fix-fg);border-color:var(--fix-bd)}
+  .badge.fail{background:var(--fail-bg);color:var(--fail-fg);border-color:var(--fail-bd)}
+  .badge.na{background:var(--na-bg);color:var(--na-fg);border-color:var(--na-bd)}
+  code{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+    padding:.02rem .3rem;font-size:.82em}
+  .grp{background:var(--surface-2)}
+  .grp td{font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  footer{color:var(--muted);font-size:.82rem;margin-top:2rem;border-top:1px solid var(--border);padding-top:1rem}
+  .note{background:var(--fix-bg);border:1px solid var(--fix-bd);color:var(--fix-fg);
+    border-radius:10px;padding:.7rem .9rem;font-size:.85rem;margin:0 0 1.25rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>Checklist de Validação — skill <code>refactor-arch</code></h1>
+    <div class="sub">Validação item a item das 3 fases (Análise · Auditoria · Refatoração) nos 3 projetos legados. Verificação read-only com inspeção de código e <b>boot ao vivo</b> das aplicações · 2026-08-11</div>
+  </header>
+
+  <div class="tiles">
+    <div class="tile ok"><div class="n">57 / 57</div><div class="l">itens aprovados (19 × 3 projetos)</div></div>
+    <div class="tile"><div class="n">3 / 3</div><div class="l">apps sobem e endpoints respondem</div></div>
+    <div class="tile"><div class="n">1</div><div class="l">defeito encontrado e corrigido na validação</div></div>
+    <div class="tile"><div class="n">0</div><div class="l">itens reprovados (FAIL)</div></div>
+  </div>
+
+  <div class="legend">
+    <span><span class="badge pass">PASS</span> aprovado</span>
+    <span><span class="badge fix">PASS (corrigido)</span> defeito detectado e corrigido nesta validação</span>
+    <span><span class="badge fail">FAIL</span> reprovado</span>
+    <span><span class="badge na">N/A</span> não aplicável</span>
+  </div>
+
+  <div class="note">
+    <b>Achado desta validação:</b> o <code>## Summary</code> do relatório do Projeto&nbsp;1 declarava <code>HIGH: 8 | Total: 30</code>, mas o corpo lista 29 findings (HIGH = 7). A contagem foi <b>corrigida para 29 (11C/7H/7M/4L)</b> em <code>reports/audit-project-1.md</code> e no README. Requisito de ≥5 findings permanece amplamente atendido.
+  </div>
+
+  <!-- ============ PROJETO 1 ============ -->
+  <section class="proj">
+    <div class="phead">
+      <h2>Projeto 1 — code-smells-project</h2>
+      <span class="stack">Python / Flask 3.1.1 · SQLite (SQL cru) · E-commerce API</span>
+    </div>
+    <div class="counts">Findings: <b>29</b> — <span class="sev c">11 CRITICAL</span> · <span class="sev h">7 HIGH</span> · <span class="sev m">7 MEDIUM</span> · <span class="sev l">4 LOW</span> &nbsp;|&nbsp; Resultado: <b>19/19 PASS</b></div>
+    <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Status</th><th>Evidência</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Fase 1 — Análise</td></tr>
+        <tr><td class="num">1</td><td class="item">Linguagem detectada corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">Relatório: "Python + Flask"; fontes <code>.py</code>, manifesto <code>requirements.txt</code>.</td></tr>
+        <tr><td class="num">2</td><td class="item">Framework detectado corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">"Flask 3.1.1" = <code>flask==3.1.1</code>; confirmado por <code>pip list</code> no venv.</td></tr>
+        <tr><td class="num">3</td><td class="item">Domínio descrito corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">E-commerce; tabelas produtos/usuarios/pedidos/itens_pedido (<code>database.py</code>).</td></tr>
+        <tr><td class="num">4</td><td class="item">Nº de arquivos condiz com a realidade</td><td><span class="badge pass">PASS</span></td><td class="ev">"4 analyzed | ~780 lines" = commit original (88+292+314+86).</td></tr>
+        <tr class="grp"><td colspan="4">Fase 2 — Auditoria</td></tr>
+        <tr><td class="num">5</td><td class="item">Relatório segue o template</td><td><span class="badge fix">PASS (corrigido)</span></td><td class="ev">Estrutura completa (cabeçalho, Summary, Findings, Total). Miscount do Summary (HIGH:8/Total:30) <b>corrigido para 7/29</b> nesta validação.</td></tr>
+        <tr><td class="num">6</td><td class="item">Cada finding tem arquivo:linha exatos</td><td><span class="badge pass">PASS</span></td><td class="ev">29/29 com <code>File: arquivo:linha</code>; 14 citações conferidas contra o commit original.</td></tr>
+        <tr><td class="num">7</td><td class="item">Findings ordenados por severidade</td><td><span class="badge pass">PASS</span></td><td class="ev">CRITICAL → HIGH → MEDIUM → LOW, sem intercalação.</td></tr>
+        <tr><td class="num">8</td><td class="item">Mínimo de 5 findings</td><td><span class="badge pass">PASS</span></td><td class="ev">29 findings — muito acima do mínimo.</td></tr>
+        <tr><td class="num">9</td><td class="item">Detecção de APIs deprecated (se aplicável)</td><td><span class="badge pass">PASS</span></td><td class="ev">Nota AP-12 documenta a varredura (<code>utcnow</code>, <code>Query.get</code>, …): 0 ocorrências (projeto sem datetime/ORM).</td></tr>
+        <tr><td class="num">10</td><td class="item">Skill pausa e pede confirmação</td><td><span class="badge pass">PASS</span></td><td class="ev">SKILL.md: "PAUSE AQUI" + <code>Proceed with refactoring (Phase 3)? [y/n]</code>.</td></tr>
+        <tr class="grp"><td colspan="4">Fase 3 — Refatoração</td></tr>
+        <tr><td class="num">11</td><td class="item">Estrutura de diretórios MVC</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>src/</code>: config/ · models/ · views/ · controllers/ · middlewares/.</td></tr>
+        <tr><td class="num">12</td><td class="item">Config extraída sem hardcoded</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>config/settings.py</code> lê env (SECRET_KEY obrigatória); nenhum secret literal.</td></tr>
+        <tr><td class="num">13</td><td class="item">Models abstraem dados</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>models/{produto,usuario,pedido}_model.py</code>; queries 100% parametrizadas <code>?</code>.</td></tr>
+        <tr><td class="num">14</td><td class="item">Views/Routes separadas</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>views/routes.py</code>, 4 blueprints finos; rotas <code>/admin/*</code> removidas.</td></tr>
+        <tr><td class="num">15</td><td class="item">Controllers concentram o fluxo</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>controllers/*_controller.py</code> orquestram validação → model → resposta.</td></tr>
+        <tr><td class="num">16</td><td class="item">Error handling centralizado</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>middlewares/error_handler.py</code> (ApiError/HTTPException/Exception, sem vazar <code>str(e)</code>).</td></tr>
+        <tr><td class="num">17</td><td class="item">Entry point claro</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>app.py</code> → composition root <code>src/app.py</code> (<code>create_app</code>).</td></tr>
+        <tr><td class="num">18</td><td class="item">Aplicação inicia sem erros</td><td><span class="badge pass">PASS</span></td><td class="ev">Boot ao vivo em <code>:5055</code> sem traceback (Debug off).</td></tr>
+        <tr><td class="num">19</td><td class="item">Endpoints originais respondem</td><td><span class="badge pass">PASS</span></td><td class="ev">7/7 HTTP 200; <code>/health</code> sem secret; <code>/usuarios</code> sem senha; login com token; <code>/admin/*</code> → 404.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ PROJETO 2 ============ -->
+  <section class="proj">
+    <div class="phead">
+      <h2>Projeto 2 — ecommerce-api-legacy</h2>
+      <span class="stack">Node.js / Express 4.18.2 · SQLite :memory: · LMS / checkout</span>
+    </div>
+    <div class="counts">Findings: <b>21</b> — <span class="sev c">6 CRITICAL</span> · <span class="sev h">7 HIGH</span> · <span class="sev m">5 MEDIUM</span> · <span class="sev l">3 LOW</span> &nbsp;|&nbsp; Resultado: <b>19/19 PASS</b></div>
+    <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Status</th><th>Evidência</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Fase 1 — Análise</td></tr>
+        <tr><td class="num">1</td><td class="item">Linguagem detectada corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">"JavaScript (Node.js)"; fontes <code>.js</code> + <code>package.json</code>.</td></tr>
+        <tr><td class="num">2</td><td class="item">Framework detectado corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">"Express 4.18.2" = <code>"express": "^4.18.2"</code> no package.json original.</td></tr>
+        <tr><td class="num">3</td><td class="item">Domínio descrito corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">LMS/checkout: users/courses/enrollments/payments/audit_logs.</td></tr>
+        <tr><td class="num">4</td><td class="item">Nº de arquivos condiz com a realidade</td><td><span class="badge pass">PASS</span></td><td class="ev">"3 analyzed | ~180 lines" = AppManager.js 141 + app.js 14 + utils.js 25.</td></tr>
+        <tr class="grp"><td colspan="4">Fase 2 — Auditoria</td></tr>
+        <tr><td class="num">5</td><td class="item">Relatório segue o template</td><td><span class="badge pass">PASS</span></td><td class="ev">Cabeçalho + Summary + Findings + <code>Total: 21 findings</code>; contagem bate com o corpo.</td></tr>
+        <tr><td class="num">6</td><td class="item">Cada finding tem arquivo:linha exatos</td><td><span class="badge pass">PASS</span></td><td class="ev">21/21 com <code>File:linha</code> (pk_live <code>utils.js:4</code>, log do cartão <code>AppManager.js:45</code>, …).</td></tr>
+        <tr><td class="num">7</td><td class="item">Findings ordenados por severidade</td><td><span class="badge pass">PASS</span></td><td class="ev">6 CRITICAL → 7 HIGH → 5 MEDIUM → 3 LOW.</td></tr>
+        <tr><td class="num">8</td><td class="item">Mínimo de 5 findings</td><td><span class="badge pass">PASS</span></td><td class="ev">21 findings.</td></tr>
+        <tr><td class="num">9</td><td class="item">Detecção de APIs deprecated (se aplicável)</td><td><span class="badge pass">PASS</span></td><td class="ev">2 findings AP-12: callback hell → async/await; Express 4 → 5.</td></tr>
+        <tr><td class="num">10</td><td class="item">Skill pausa e pede confirmação</td><td><span class="badge pass">PASS</span></td><td class="ev">SKILL.md: "PAUSE AQUI" + <code>Proceed with refactoring (Phase 3)? [y/n]</code>.</td></tr>
+        <tr class="grp"><td colspan="4">Fase 3 — Refatoração</td></tr>
+        <tr><td class="num">11</td><td class="item">Estrutura de diretórios MVC</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>src/</code>: config/ · models/(5) · controllers/(3) · routes/(3) · middlewares/(5) · services/ · db/.</td></tr>
+        <tr><td class="num">12</td><td class="item">Config extraída sem hardcoded</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>grep pk_live|senha_super</code> em src/ → 0; tudo via <code>process.env</code> + <code>.env.example</code>.</td></tr>
+        <tr><td class="num">13</td><td class="item">Models abstraem dados</td><td><span class="badge pass">PASS</span></td><td class="ev">user/course/enrollment/payment/auditLog; SQL confinado (delete transacional).</td></tr>
+        <tr><td class="num">14</td><td class="item">Views/Routes separadas</td><td><span class="badge pass">PASS</span></td><td class="ev">checkout/admin/user Routes: só Router + validação + delegação, sem SQL/regra.</td></tr>
+        <tr><td class="num">15</td><td class="item">Controllers concentram o fluxo</td><td><span class="badge pass">PASS</span></td><td class="ev">checkout/report/user controllers orquestram service/model → resposta.</td></tr>
+        <tr><td class="num">16</td><td class="item">Error handling centralizado</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>errorHandler.js</code> (JSON padronizado) + <code>notFoundHandler.js</code> (404).</td></tr>
+        <tr><td class="num">17</td><td class="item">Entry point claro</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>src/app.js</code> composition root; <code>npm start</code> = <code>node src/app.js</code>.</td></tr>
+        <tr><td class="num">18</td><td class="item">Aplicação inicia sem erros</td><td><span class="badge pass">PASS</span></td><td class="ev">Boot ao vivo <code>:3010</code>: <code>server.started</code>, sem exceptions.</td></tr>
+        <tr><td class="num">19</td><td class="item">Endpoints originais respondem</td><td><span class="badge pass">PASS</span></td><td class="ev">checkout 4111→200, 5111→400, report→200, DELETE→200; cartão numérico→400 sem crash; logs sem PAN (<code>****4444</code>).</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ PROJETO 3 ============ -->
+  <section class="proj">
+    <div class="phead">
+      <h2>Projeto 3 — task-manager-api</h2>
+      <span class="stack">Python / Flask 3.0.0 + SQLAlchemy · SQLite · Task Manager (camadas de fachada)</span>
+    </div>
+    <div class="counts">Findings: <b>26</b> — <span class="sev c">6 CRITICAL</span> · <span class="sev h">5 HIGH</span> · <span class="sev m">9 MEDIUM</span> · <span class="sev l">6 LOW</span> &nbsp;|&nbsp; Resultado: <b>19/19 PASS</b></div>
+    <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Status</th><th>Evidência</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Fase 1 — Análise</td></tr>
+        <tr><td class="num">1</td><td class="item">Linguagem detectada corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">"Python + Flask"; 15 arquivos <code>.py</code> no commit original.</td></tr>
+        <tr><td class="num">2</td><td class="item">Framework detectado corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">"Flask 3.0.0 + Flask-SQLAlchemy 3.1.1" = requirements.txt.</td></tr>
+        <tr><td class="num">3</td><td class="item">Domínio descrito corretamente</td><td><span class="badge pass">PASS</span></td><td class="ev">Task Manager: tasks/users/categories/reports.</td></tr>
+        <tr><td class="num">4</td><td class="item">Nº de arquivos condiz com a realidade</td><td><span class="badge pass">PASS</span></td><td class="ev">"15 analyzed | ~1158 lines" = commit original (15 <code>.py</code>, 1158 linhas).</td></tr>
+        <tr class="grp"><td colspan="4">Fase 2 — Auditoria</td></tr>
+        <tr><td class="num">5</td><td class="item">Relatório segue o template</td><td><span class="badge pass">PASS</span></td><td class="ev">Cabeçalho + Summary + Findings + <code>Total: 26 findings</code>; contagem bate com o corpo.</td></tr>
+        <tr><td class="num">6</td><td class="item">Cada finding tem arquivo:linha exatos</td><td><span class="badge pass">PASS</span></td><td class="ev">26/26 com <code>File:linha</code> (<code>app.py:13</code>, <code>models/user.py:29,32</code>, …).</td></tr>
+        <tr><td class="num">7</td><td class="item">Findings ordenados por severidade</td><td><span class="badge pass">PASS</span></td><td class="ev">6 CRITICAL → 5 HIGH → 9 MEDIUM → 6 LOW.</td></tr>
+        <tr><td class="num">8</td><td class="item">Mínimo de 5 findings</td><td><span class="badge pass">PASS</span></td><td class="ev">26 findings.</td></tr>
+        <tr><td class="num">9</td><td class="item">Detecção de APIs deprecated (se aplicável)</td><td><span class="badge pass">PASS</span></td><td class="ev">2 findings AP-12: <code>datetime.utcnow()</code> (22×) e <code>Model.query.get()</code> (16×), com o equivalente moderno.</td></tr>
+        <tr><td class="num">10</td><td class="item">Skill pausa e pede confirmação</td><td><span class="badge pass">PASS</span></td><td class="ev">SKILL.md: "PAUSE AQUI" + <code>Proceed with refactoring (Phase 3)? [y/n]</code>.</td></tr>
+        <tr class="grp"><td colspan="4">Fase 3 — Refatoração (adaptada)</td></tr>
+        <tr><td class="num">11</td><td class="item">Estrutura de diretórios MVC</td><td><span class="badge pass">PASS</span></td><td class="ev">config/ · models/ · routes/(6) · controllers/(5) · middlewares/; <code>services/</code> morto removido.</td></tr>
+        <tr><td class="num">12</td><td class="item">Config extraída sem hardcoded</td><td><span class="badge pass">PASS</span></td><td class="ev">SECRET_KEY via <code>os.environ</code> (obrigatória); <code>senha123</code>/SMTP = 0 ocorrências.</td></tr>
+        <tr><td class="num">13</td><td class="item">Models abstraem dados</td><td><span class="badge pass">PASS</span></td><td class="ev">Métodos de domínio (<code>set_password</code> werkzeug, <code>is_overdue</code>); SQLAlchemy 2.0.</td></tr>
+        <tr><td class="num">14</td><td class="item">Views/Routes separadas</td><td><span class="badge pass">PASS</span></td><td class="ev">6 arquivos de rota finos; <code>category_routes.py</code> separado; 0 <code>select(</code>/<code>filter</code> em routes/.</td></tr>
+        <tr><td class="num">15</td><td class="item">Controllers concentram o fluxo</td><td><span class="badge pass">PASS</span></td><td class="ev">5 controllers com validação → model → resposta; rotas delegam 100%.</td></tr>
+        <tr><td class="num">16</td><td class="item">Error handling centralizado</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>middlewares/error_handler.py</code> (exceções tipadas + rollback); <code>except:</code> nu = 0.</td></tr>
+        <tr><td class="num">17</td><td class="item">Entry point claro</td><td><span class="badge pass">PASS</span></td><td class="ev">App Factory <code>create_app()</code>; <code>run</code> só sob <code>__main__</code>.</td></tr>
+        <tr><td class="num">18</td><td class="item">Aplicação inicia sem erros</td><td><span class="badge pass">PASS</span></td><td class="ev"><code>seed.py</code> com <code>-W error::DeprecationWarning</code> exit 0; app sobe em <code>:5056</code> sem traceback.</td></tr>
+        <tr><td class="num">19</td><td class="item">Endpoints originais respondem</td><td><span class="badge pass">PASS</span></td><td class="ev">/health, /tasks, /tasks/1, /tasks/stats, /users, /reports/summary, /categories → 200; <code>POST /login</code> 200 <b>sem campo password</b>.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="counts" style="margin-top:.5rem"><b>Bônus (requisito do desafio):</b> <code>datetime.utcnow(</code> = <b>0</b> e <code>.query.get(</code> = <b>0</b> no código (eram 22 e 16 no baseline) — APIs deprecated eliminadas.</div>
+  </section>
+
+  <footer>
+    Gerado a partir de verificação read-only (inspeção de código + boot ao vivo das 3 aplicações) em 2026-08-11.
+    Fontes: <code>reports/audit-project-{1,2,3}.md</code> e o código refatorado na branch <code>feat/refactor-arch-skill</code>.
+    Critérios de aceite do desafio: <b>4/4 atingidos nos 3 projetos</b> (stack detectada · ≥5 findings com ≥1 CRITICAL/HIGH · aplicação funciona após refatoração).
+  </footer>
+
+</div>
+</body>
+</html>
