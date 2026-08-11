@@ -324,7 +324,7 @@ db.serialize(() => {
 });
 ```
 
-- **Notas:** a transação mora no Model (método de domínio, ex.: `PedidoModel.criar_com_itens`). Com ORM: `db.session` acumula e `commit()` uma vez no fim, `rollback()` no except. Combine com RP-13 em Node — com `async/await` a transação fica linear.
+- **Notas:** a transação mora no Model (método de domínio, ex.: `PedidoModel.criar_com_itens`). Com ORM: `db.session` acumula e `commit()` uma vez no fim, `rollback()` no except. Combine com RP-13 em Node — com `async/await` a transação fica linear. Após aplicar RP-13, a mesma transação fica linear com async/await: `await run(db, "BEGIN"); ...; await run(db, "COMMIT")` dentro de um try/catch que chama `await run(db, "ROLLBACK")` no catch (veja o wrapper `run()` na nota de RP-13).
 
 ## RP-08 — Centralizar error handling em Middlewares
 
@@ -620,6 +620,18 @@ async function checkout(req, res, next) {
 ```
 
 - **Notas:** promisificar na borda da infra (uma vez), nunca por chamada. O try/catch único delega ao middleware de erro. Isso habilita RP-07 (transação linear) no mesmo passo.
+
+> **Nota — `lastID`/`changes`:** `promisify(db.run)` perde `this.lastID` e `this.changes` — o sqlite3 expõe esses valores via `this` dentro do callback (função regular, não arrow function), não no valor resolvido pela Promise. Quando a rota precisar do id inserido ou do nº de linhas afetadas, use um wrapper manual em vez de `promisify`:
+>
+> ```js
+> function run(db, sql, params) {
+>   return new Promise((resolve, reject) => {
+>     db.run(sql, params, function (err) {
+>       if (err) reject(err); else resolve({ lastID: this.lastID, changes: this.changes });
+>     });
+>   });
+> }
+> ```
 
 ## RP-14 — Absorver/remover camadas de fachada e deduplicar
 

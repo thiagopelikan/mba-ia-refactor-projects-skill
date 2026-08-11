@@ -85,6 +85,8 @@ projeto/
 
 ### Node (Express) — mapeamento de nomes equivalentes
 
+O prefixo `src/` abaixo é opcional/convencional — use-o quando o projeto já adota `src/`; caso contrário, as mesmas pastas ficam direto na raiz (ex.: `models/` em vez de `src/models/`). A estrutura de camadas é idêntica com ou sem esse prefixo.
+
 | Camada (nome canônico) | Pasta/arquivo em Node |
 |---|---|
 | Config | `src/config/index.js` |
