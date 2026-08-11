@@ -494,6 +494,335 @@ Antes de construir a skill `refactor-arch`, os três projetos legados foram lido
 
 ---
 
+## Construção da Skill
+
+A skill `refactor-arch` foi construída em `.claude/skills/refactor-arch/` (Claude Code) como um **prompt orquestrador** (`SKILL.md`) mais **5 arquivos de referência em Markdown**, e depois copiada **sem nenhuma alteração** para dentro dos outros 2 projetos — provando que o mesmo artefato funciona em stacks diferentes.
+
+### Decisões de design
+
+- **`SKILL.md` enxuto + conhecimento em `references/`.** O `SKILL.md` só descreve o fluxo das 3 fases (o que fazer, em que ordem, quando parar). Todo o conhecimento de domínio — heurísticas, catálogo, template, arquitetura-alvo, transformações — vive em arquivos de referência separados, carregados sob demanda em cada fase. Isso mantém o orquestrador curto e legível, e torna o conhecimento reutilizável e versionável independente do prompt.
+- **Separação por fase, não por assunto.** Cada uma das 3 fases do `SKILL.md` aponta explicitamente quais referências ler antes de agir (Fase 1 → `project-analysis.md`; Fase 2 → `anti-patterns-catalog.md` + `audit-report-template.md`; Fase 3 → `mvc-guidelines.md` + `refactoring-playbook.md`), evitando que o agente carregue contexto irrelevante para a etapa atual.
+- **Gate de confirmação explícito.** A Fase 2 termina sempre com a pergunta literal `Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` e a instrução "não modifique nenhum arquivo do projeto antes de receber `y`" — a Fase 3 só é lida/executada depois da resposta afirmativa.
+- **Rastreabilidade finding → correção.** Cada finding da Fase 2 referencia o ID do anti-pattern do catálogo (AP-NN) e a recomendação aponta o padrão do playbook que o resolve (RP-NN), fechando o ciclo auditoria → refatoração.
+
+### Anti-patterns no catálogo (`references/anti-patterns-catalog.md`)
+
+16 anti-patterns (AP-01 a AP-16), com distribuição de severidade **5 CRITICAL / 5 HIGH / 4 MEDIUM / 2 LOW** — acima do mínimo de 8 exigido pelo desafio:
+
+| ID | Anti-pattern | Severidade |
+|---|---|---|
+| AP-01 | Hardcoded Credentials / Secrets | CRITICAL |
+| AP-02 | SQL Injection | CRITICAL |
+| AP-03 | God Class / God Module / God Method | CRITICAL |
+| AP-04 | Weak/Broken Password Hashing & Exposição de Senha | CRITICAL |
+| AP-05 | Arbitrary SQL/Code Execution & Endpoints Destrutivos sem Auth | CRITICAL |
+| AP-06 | Missing Authentication / Authorization | HIGH |
+| AP-07 | Business Logic in Controller/Route | HIGH |
+| AP-08 | Global Mutable State | HIGH |
+| AP-09 | Missing Transaction / Non-atomic Writes | HIGH |
+| AP-10 | Insecure Config em Produção | HIGH |
+| AP-11 | N+1 Query | MEDIUM |
+| AP-12 | Deprecated API Usage *(seção obrigatória)* | MEDIUM |
+| AP-13 | Missing Input Validation | MEDIUM |
+| AP-14 | Code Duplication & Dead Layers (camadas de fachada) | MEDIUM |
+| AP-15 | Poor Naming / Magic Numbers | LOW |
+| AP-16 | Dead Code / Bad Hygiene | LOW |
+
+Os anti-patterns foram escolhidos por **impacto arquitetural** e por serem detectáveis a partir de **sinais acionáveis** — nunca "código ruim" genérico, sempre algo como "query concatenada com input do usuário" ou "arquivo com mais de uma responsabilidade de domínio". O catálogo cobre 4 famílias: segurança (credenciais, SQL Injection, hash fraco), violações de MVC/SOLID (God Class, lógica no controller, estado global, ausência de transação), performance (N+1) e qualidade (validação ausente, duplicação, nomenclatura, APIs deprecated).
+
+AP-12 (Deprecated API Usage) tem uma seção própria obrigatória com tabelas separadas por stack:
+
+- **Python:** `datetime.utcnow()` → `datetime.now(timezone.utc)`, `datetime.utcfromtimestamp()` → `datetime.fromtimestamp(tz=...)`, `Model.query.get(id)` → `db.session.get(Model, id)`, `Model.query.filter(...)` (estilo legacy) → `select(...)` (SQLAlchemy 2.0), `@app.before_first_request` → inicialização no factory.
+- **Node:** `body-parser` → `express.json()`/`express.urlencoded()`, `crypto.createCipher` → `crypto.createCipheriv`, `new Buffer(...)` → `Buffer.from(...)`, callbacks aninhados → `async/await`, `url.parse(...)` → `new URL(...)`.
+
+Para a Fase 3, o `references/refactoring-playbook.md` traz **15 padrões de transformação** (RP-01 a RP-15, acima do mínimo de 8), cada um com código ANTES/DEPOIS, cobrindo desde extração de config e parametrização de queries até conversão de callbacks para `async/await` e absorção de camadas de fachada mortas — com uma tabela de rastreabilidade explícita ligando cada AP-NN ao(s) RP-NN que o resolve(m).
+
+### Como garantimos o agnosticismo de tecnologia
+
+- **Detecção por manifesto + heurísticas por stack.** `references/project-analysis.md` detecta linguagem/framework/versão a partir de `requirements.txt`/`package.json` (e imports/rotas quando o manifesto não basta), com "worked examples" cobrindo explicitamente os 3 stacks-alvo do desafio.
+- **Playbook com exemplos em Python E Node lado a lado** para os padrões que se aplicam a ambos, mais um padrão específico (RP-13) só para conversão de callbacks no Node.
+- **Regra de ADAPTAÇÃO** em `references/mvc-guidelines.md`: quando o projeto já possui alguma separação em camadas (caso do Projeto 3), a skill deve reorganizar/absorver o que já existe em vez de reescrever do zero.
+- **Prova empírica:** a mesma skill, copiada byte a byte (`diff -rq` entre as 3 cópias não acusa nenhuma diferença), rodou com sucesso em um monolito procedural Flask, uma God Class Express e um Flask+SQLAlchemy com camadas de fachada.
+
+### Desafios encontrados e como foram resolvidos
+
+| # | Desafio | Solução |
+|---|---|---|
+| 1 | A porta padrão 5000 no macOS é ocupada pelo AirPlay Receiver, quebrando a validação de boot da Fase 3. | A skill e a validação passaram a ler a porta de uma variável de ambiente (`PORT`), com fallback para 5000 — documentado nos `.env.example` de cada projeto. |
+| 2 | Tensão entre exigir autenticação (correto do ponto de vista de segurança) e o critério de aceite "endpoints continuam respondendo" — exigir auth faria os endpoints do baseline (sem token) retornarem 401. | A infraestrutura de autenticação (token assinado, `middlewares/auth.py`/`auth.js`) foi construída, mas deixada **não-obrigatória** por padrão nos endpoints herdados do baseline. Documentada como limitação aceita, priorizando não quebrar o contrato HTTP existente. |
+| 3 | O banco `:memory:` do projeto 2 (Node) perde todo o estado a cada boot, e o baseline depende de dados de seed já existirem. | `db/init.js` roda o seed de forma transacional no boot da aplicação, antes de aceitar requisições. |
+| 4 | O projeto 3 já tinha uma pasta `services/` e `utils/helpers.py`, mas eram **camadas de fachada mortas** (nunca importadas, ou duplicando lógica que já existia nos models) — uma reescrita ingênua manteria o lixo ou apagaria trabalho útil. | A Fase 3 aplicou a regra de adaptação: absorveu os métodos de domínio já existentes nos models (ex.: `Task.is_overdue()`, `to_dict()`), removeu `services/` (código morto) e tornou `utils/helpers.py` a implementação canônica única. |
+
+## Resultados
+
+### Resumo da auditoria (Fase 2) nos 3 projetos
+
+| Projeto | Stack | Findings | Distribuição |
+|---|---|---|---|
+| 1 — code-smells-project | Python/Flask 3.1.1 (SQLite, SQL cru) | 30 | 11 CRITICAL / 8 HIGH / 7 MEDIUM / 4 LOW |
+| 2 — ecommerce-api-legacy | Node/Express 4.18.2 (SQLite `:memory:`) | 21 | 6 CRITICAL / 7 HIGH / 5 MEDIUM / 3 LOW |
+| 3 — task-manager-api | Python/Flask 3.0.0 + SQLAlchemy | 26 | 6 CRITICAL / 5 HIGH / 9 MEDIUM / 6 LOW |
+
+Todos os 3 projetos superam com folga o mínimo de 5 findings e incluem múltiplos CRITICAL/HIGH exigidos pelos Critérios de Aceite. Relatórios completos em [`reports/audit-project-1.md`](reports/audit-project-1.md), [`reports/audit-project-2.md`](reports/audit-project-2.md) e [`reports/audit-project-3.md`](reports/audit-project-3.md).
+
+### Antes / depois da estrutura
+
+#### Projeto 1 — code-smells-project
+
+```
+# ANTES                          # DEPOIS
+code-smells-project/             code-smells-project/
+├── app.py                       ├── app.py                 # composition root
+├── controllers.py                ├── requirements.txt
+├── models.py    (God Module,    └── src/
+│                 ~314 linhas)       ├── config/settings.py
+├── database.py  (conexão            ├── models/
+│                 singleton          │   ├── produto_model.py
+│                 global)            │   ├── usuario_model.py
+└── requirements.txt                 │   └── pedido_model.py
+                                      ├── controllers/
+                                      │   ├── produto_controller.py
+                                      │   ├── usuario_controller.py
+                                      │   └── pedido_controller.py
+                                      ├── views/routes.py
+                                      ├── middlewares/error_handler.py
+                                      ├── services/
+                                      └── database.py
+```
+
+Principais correções: queries parametrizadas (fim do SQL Injection), hash de senha com `werkzeug.security`, configuração via `.env`/`config/settings.py` (fim dos hardcoded), rotas `/admin/query` e `/admin/reset-db` removidas, error handling centralizado em middleware, conexão de banco por request em vez de singleton global.
+
+#### Projeto 2 — ecommerce-api-legacy
+
+```
+# ANTES                          # DEPOIS
+ecommerce-api-legacy/            ecommerce-api-legacy/
+└── src/                         └── src/
+    ├── app.js                       ├── app.js
+    ├── AppManager.js (God               ├── config/
+    │   Class, ~141 linhas)             ├── db/
+    └── utils.js (credenciais            ├── models/            (5 models)
+        + estado global)                 ├── services/          (gateway, bcrypt/password,
+                                          │                       notificação, token, checkout, logger)
+                                          ├── controllers/       (3)
+                                          ├── routes/            (3)
+                                          ├── middlewares/       (5)
+                                          └── errors.js
+```
+
+Principais correções: credenciais movidas para `.env`, hash de senha com bcrypt, checkout transacional (`BEGIN`/`COMMIT`/`ROLLBACK`), cascade correto no delete de usuário, callback hell (5 níveis) convertido para `async/await`, validação de payload (antes derrubava o processo Node com `TypeError` não tratado, agora responde 400), relatório financeiro de N+1 para JOIN, e nenhum PAN de cartão ou chave de gateway em log.
+
+#### Projeto 3 — task-manager-api
+
+```
+# ANTES                          # DEPOIS
+task-manager-api/                task-manager-api/
+├── app.py (db.create_all()      ├── app.py            # App Factory (create_app)
+│   disparado no import)         ├── config/settings.py
+├── models/                      ├── controllers/
+├── routes/ (lógica inline)      ├── routes/            # finas + category_routes.py (novo)
+├── services/ (MORTO,            ├── middlewares/
+│   SMTP hardcoded, nunca        │   ├── error_handler.py
+│   importado)                   │   └── auth.py
+└── utils/helpers.py             ├── models/            # SQLAlchemy 2.0 + métodos de domínio
+    (duplicado, não usado)       ├── utils/helpers.py   # canônico (única implementação)
+                                  └── seed.py
+                                  # services/ REMOVIDO (código morto)
+```
+
+Principais correções: MD5 → hash `werkzeug.security`, senha removida das respostas da API (`to_dict()`/login não vazam mais o hash), token de login trocado pelo literal `'fake-jwt-token-' + id` por um token assinado, **0 usos de `datetime.utcnow()` e 0 usos de `Model.query.get()` restantes** (as 22 + 16 ocorrências deprecated foram eliminadas — RP-10), N+1 em `GET /tasks` resolvido com eager loading/JOIN, e absorção das camadas de fachada mortas (`services/` removido, `Task.is_overdue()`/`to_dict()` do model passam a ser a única implementação em vez de 6 cópias inline nas rotas).
+
+### Checklist de validação preenchido
+
+#### Projeto 1 — code-smells-project
+
+```markdown
+## Checklist de Validação
+
+### Fase 1 — Análise
+- [x] Linguagem detectada corretamente — Python
+- [x] Framework detectado corretamente — Flask 3.1.1
+- [x] Domínio da aplicação descrito corretamente — E-commerce (produtos, usuários, pedidos)
+- [x] Número de arquivos analisados condiz com a realidade — 4 arquivos (app.py, controllers.py, models.py, database.py)
+
+### Fase 2 — Auditoria
+- [x] Relatório segue o template definido nos arquivos de referência
+- [x] Cada finding tem arquivo e linhas exatos
+- [x] Findings ordenados por severidade (CRITICAL → LOW)
+- [x] Mínimo de 5 findings identificados — 30 findings
+- [x] Detecção de APIs deprecated incluída (se aplicável) — verificado; stack sem ORM/datetime não acusou ocorrências de AP-12 relevantes
+- [x] Skill pausa e pede confirmação antes da Fase 3 — prompt `[y/n]` exibido e respeitado
+
+### Fase 3 — Refatoração
+- [x] Estrutura de diretórios segue padrão MVC — `src/{config,models,controllers,views,middlewares}`
+- [x] Configuração extraída para módulo de config (sem hardcoded) — `src/config/settings.py` + `.env.example`
+- [x] Models criados para abstrair dados — `produto_model.py`, `usuario_model.py`, `pedido_model.py`
+- [x] Views/Routes separadas — `src/views/routes.py`
+- [x] Controllers concentram o fluxo da aplicação — `src/controllers/*`
+- [x] Error handling centralizado — `src/middlewares/error_handler.py`
+- [x] Entry point claro — `app.py` (composition root)
+- [x] Aplicação inicia sem erros — boot confirmado (`SECRET_KEY=... PORT=5055 python app.py`)
+- [x] Endpoints originais respondem corretamente — `GET /produtos` retornou 200 com o catálogo completo
+```
+
+#### Projeto 2 — ecommerce-api-legacy
+
+```markdown
+## Checklist de Validação
+
+### Fase 1 — Análise
+- [x] Linguagem detectada corretamente — JavaScript (Node.js)
+- [x] Framework detectado corretamente — Express 4.18.2
+- [x] Domínio da aplicação descrito corretamente — LMS com fluxo de checkout (cursos, matrículas, pagamentos)
+- [x] Número de arquivos analisados condiz com a realidade — `src/app.js`, `src/AppManager.js`, `src/utils.js`
+
+### Fase 2 — Auditoria
+- [x] Relatório segue o template definido nos arquivos de referência
+- [x] Cada finding tem arquivo e linhas exatos
+- [x] Findings ordenados por severidade (CRITICAL → LOW)
+- [x] Mínimo de 5 findings identificados — 21 findings
+- [x] Detecção de APIs deprecated incluída (se aplicável) — callback hell (11 chamadas) e Express 4 sinalizados sob AP-12
+- [x] Skill pausa e pede confirmação antes da Fase 3 — prompt `[y/n]` exibido e respeitado
+
+### Fase 3 — Refatoração
+- [x] Estrutura de diretórios segue padrão MVC — `src/{config,db,models,services,controllers,routes,middlewares}`
+- [x] Configuração extraída para módulo de config (sem hardcoded) — `src/config/index.js` + `.env`
+- [x] Models criados para abstrair dados — 5 models (`userModel`, `courseModel`, `enrollmentModel`, `paymentModel`, `auditLogModel`)
+- [x] Views/Routes separadas — `src/routes/{checkoutRoutes,adminRoutes,userRoutes}.js`
+- [x] Controllers concentram o fluxo da aplicação — `src/controllers/{checkoutController,reportController,userController}.js`
+- [x] Error handling centralizado — `src/errors.js` + `middlewares/errorHandler.js`
+- [x] Entry point claro — `src/app.js`
+- [x] Aplicação inicia sem erros — boot confirmado (`PORT=3010 node src/app.js`, seed automático no init)
+- [x] Endpoints originais respondem corretamente — `POST /api/checkout` (200, matrícula criada) e `GET /api/admin/financial-report` (200) testados
+```
+
+#### Projeto 3 — task-manager-api
+
+```markdown
+## Checklist de Validação
+
+### Fase 1 — Análise
+- [x] Linguagem detectada corretamente — Python
+- [x] Framework detectado corretamente — Flask 3.0.0 + SQLAlchemy
+- [x] Domínio da aplicação descrito corretamente — Task Manager (tarefas, categorias, usuários, relatórios)
+- [x] Número de arquivos analisados condiz com a realidade — `app.py`, `database.py`, `models/`, `routes/`, `services/`, `utils/`
+
+### Fase 2 — Auditoria
+- [x] Relatório segue o template definido nos arquivos de referência
+- [x] Cada finding tem arquivo e linhas exatos
+- [x] Findings ordenados por severidade (CRITICAL → LOW)
+- [x] Mínimo de 5 findings identificados — 26 findings
+- [x] Detecção de APIs deprecated incluída (se aplicável) — 22 usos de `datetime.utcnow()` + 16 usos de `Model.query.get()` catalogados
+- [x] Skill pausa e pede confirmação antes da Fase 3 — prompt `[y/n]` exibido e respeitado
+
+### Fase 3 — Refatoração
+- [x] Estrutura de diretórios segue padrão MVC — `{config,controllers,routes,middlewares,models,utils}/`
+- [x] Configuração extraída para módulo de config (sem hardcoded) — `config/settings.py` + `.env`
+- [x] Models criados para abstrair dados — `models/{user,task,category}.py` com métodos de domínio (`is_overdue()`, `to_dict()`)
+- [x] Views/Routes separadas — `routes/*` finas (inclui `category_routes.py`, novo)
+- [x] Controllers concentram o fluxo da aplicação — `controllers/*`
+- [x] Error handling centralizado — `middlewares/error_handler.py`
+- [x] Entry point claro — `app.py` (App Factory `create_app`)
+- [x] Aplicação inicia sem erros — `python seed.py` (sem `DeprecationWarning`) + boot confirmado (`PORT=5056 python app.py`)
+- [x] Endpoints originais respondem corretamente — `GET /tasks` (200) e `POST /login` (200, hash da senha não vaza mais na resposta)
+```
+
+### Logs de execução (evidência)
+
+Boot e chamadas reais capturados após a refatoração dos 3 projetos, para validar o critério "aplicação funciona":
+
+```
+# Projeto 1 — boot
+2026-08-11 14:36:55 INFO src.database: Banco loja.db inicializado com seed (10 produtos, 3 usuários)
+2026-08-11 14:36:55 INFO src.app: Servidor iniciado em http://127.0.0.1:5055
+ * Running on http://127.0.0.1:5055
+$ curl localhost:5055/produtos
+{"dados":[{"id":1,"nome":"Notebook Gamer","preco":5999.99,...}]}   # HTTP 200
+
+# Projeto 2 — boot
+{"level":"info","message":"db.init","seeded":true,"users":1,"courses":2}
+{"level":"info","message":"server.started","port":3010,"authEnforced":false}
+$ curl -X POST localhost:3010/api/checkout -d '{"usr":"Guilherme","eml":"gui@fullcycle.com.br","pwd":"senhaforte","c_id":2,"card":"4111222233334444"}'
+{"msg":"Sucesso","enrollment_id":2}                                 # HTTP 200 — sem PAN/segredo no log
+$ curl localhost:3010/api/admin/financial-report
+[{"course":"Clean Architecture","revenue":997,...}]                 # HTTP 200
+
+# Projeto 3 — seed + boot
+INFO __main__: Seed concluído com sucesso! (3 usuários, 4 categorias, 10 tasks)   # sem DeprecationWarning
+ * Running on http://127.0.0.1:5056
+$ curl -X POST localhost:5056/login -d '{"email":"joao@email.com","password":"..."}'
+{"message":"Login realizado com sucesso","token":"eyJ1c2VyX2lkIjoxLCJyb2xlIjoiYWRtaW4ifQ...","user":{...}}  # HTTP 200 — sem campo "password"
+$ curl localhost:5056/tasks
+[{"id":1,"title":"Implementar autenticação JWT","user_name":"João Silva",...}]     # HTTP 200
+```
+
+### Observações sobre comportamento em stacks diferentes
+
+A **mesma skill**, copiada sem nenhuma alteração (`SKILL.md` + 5 referências idênticos byte a byte nos 3 projetos), funcionou nos 3 stacks-alvo do desafio: um monolito procedural em Flask com SQL cru (Projeto 1), uma God Class em Express com callback hell e banco `:memory:` (Projeto 2), e um Flask+SQLAlchemy que já tinha camadas de fachada mortas (Projeto 3) — o que comprova o agnosticismo de tecnologia exigido.
+
+A Fase 3 se adaptou ao contexto de cada projeto, como previsto na regra de adaptação: nos dois monolitos (Projetos 1 e 2) a skill fez uma reescrita completa em camadas MVC; no Projeto 3 ela fez uma reorganização adaptada, absorvendo os métodos de domínio que já existiam nos models em vez de recriá-los do zero, e removendo apenas o que era código morto (`services/`).
+
+## Como Executar
+
+### Pré-requisitos
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) instalado e configurado
+- Python 3 + `venv` (para `code-smells-project` e `task-manager-api`, ambos Flask)
+- Node.js + npm (para `ecommerce-api-legacy`, Express)
+
+### Comandos para executar a skill em cada projeto
+
+```bash
+# Projeto 1 — Python/Flask
+cd code-smells-project && claude "/refactor-arch"
+
+# Projeto 2 — Node/Express
+cd ../ecommerce-api-legacy && claude "/refactor-arch"
+
+# Projeto 3 — Python/Flask + SQLAlchemy
+cd ../task-manager-api && claude "/refactor-arch"
+```
+
+Em cada execução, revise o relatório impresso na Fase 2 e responda `y` no prompt `Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` para a skill prosseguir com a refatoração.
+
+### Como validar que a refatoração funcionou
+
+Suba cada aplicação já refatorada e exercite os endpoints originais.
+
+> **Nota:** no macOS a porta 5000 costuma estar ocupada pelo AirPlay Receiver — use uma porta livre via variável de ambiente (ex.: `PORT=5055`).
+
+```bash
+# Projeto 1
+cd code-smells-project
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+SECRET_KEY=dev PORT=5055 python app.py
+# em outro terminal:
+curl localhost:5055/produtos
+
+# Projeto 2
+cd ecommerce-api-legacy
+npm install
+PORT=3010 node src/app.js
+# em outro terminal (ver payloads completos em api.http):
+curl -X POST localhost:3010/api/checkout \
+  -H "Content-Type: application/json" \
+  -d '{"usr":"Guilherme","eml":"gui@fullcycle.com.br","pwd":"senhaforte","c_id":2,"card":"4111222233334444"}'
+
+# Projeto 3
+cd task-manager-api
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+python seed.py
+SECRET_KEY=dev PORT=5056 python app.py
+# em outro terminal:
+curl localhost:5056/tasks
+```
+
+Se a aplicação subir sem erros e os endpoints acima responderem com HTTP 200, a refatoração preservou o contrato original — que é exatamente o que a Fase 3 da skill valida automaticamente ao final de cada execução.
+
+---
+
 ## Dicas Finais
 
 - **Comece pela análise manual** — entender os problemas profundamente é essencial para criar uma skill que os detecte.
