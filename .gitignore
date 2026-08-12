@@ -13,3 +13,4 @@ instance/
 
 # Superpowers scratch
 .superpowers/
+.DS_Store
