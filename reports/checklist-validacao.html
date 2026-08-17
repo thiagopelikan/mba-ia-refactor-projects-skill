@@ -89,13 +89,14 @@
 
   <header class="page">
     <h1>Checklist de Validação — skill <code>refactor-arch</code></h1>
-    <div class="sub">Validação item a item das 3 fases (Análise · Auditoria · Refatoração) nos 3 projetos legados. Verificação read-only com inspeção de código e <b>boot ao vivo</b> das aplicações · 2026-08-11</div>
+    <div class="sub">Validação item a item das 3 fases (Análise · Auditoria · Refatoração) nos 3 projetos legados. Verificação read-only com inspeção de código e <b>boot ao vivo</b> das aplicações · 2026-08-11 &nbsp;·&nbsp; <b>Reenvio 2026-08-17:</b> autenticação aplicada de fato nas rotas sensíveis (RP-12) e verificada 401&nbsp;→&nbsp;2xx</div>
   </header>
 
   <div class="tiles">
     <div class="tile ok"><div class="n">57 / 57</div><div class="l">itens aprovados (19 × 3 projetos)</div></div>
     <div class="tile"><div class="n">3 / 3</div><div class="l">apps sobem e endpoints respondem</div></div>
     <div class="tile"><div class="n">1</div><div class="l">defeito encontrado e corrigido na validação</div></div>
+    <div class="tile ok"><div class="n">10</div><div class="l">rotas sensíveis agora exigem token (401 sem · 2xx com)</div></div>
     <div class="tile"><div class="n">0</div><div class="l">itens reprovados (FAIL)</div></div>
   </div>
 
@@ -109,6 +110,39 @@
   <div class="note">
     <b>Achado desta validação:</b> o <code>## Summary</code> do relatório do Projeto&nbsp;1 declarava <code>HIGH: 8 | Total: 30</code>, mas o corpo lista 29 findings (HIGH = 7). A contagem foi <b>corrigida para 29 (11C/7H/7M/4L)</b> em <code>reports/audit-project-1.md</code> e no README. Requisito de ≥5 findings permanece amplamente atendido.
   </div>
+
+  <div class="note" style="background:var(--pass-bg);border-color:var(--pass-bd);color:var(--pass-fg)">
+    <b>Reenvio (2026-08-17) — correção de autenticação:</b> a 1ª entrega foi reprovada porque a infraestrutura de auth existia mas <b>não estava ligada às rotas</b> (<code>ENFORCE_AUTH=0</code> no ecommerce; decorators não aplicados no task-manager), deixando os findings CRITICAL/HIGH de auth (DELETE sem auth, relatório financeiro público) reproduzíveis na app. <b>Corrigido:</b> a auth agora é aplicada <b>por padrão</b> às rotas sensíveis dos 3 projetos, e a skill foi endurecida — Fase 3 e Validação passam a exigir a prova <code>401 sem token</code> / <code>2xx com token</code>.
+  </div>
+
+  <!-- ============ AUTENTICAÇÃO (RP-12) ============ -->
+  <section class="proj">
+    <div class="phead">
+      <h2>Autenticação aplicada nas rotas sensíveis (RP-12)</h2>
+      <span class="stack">Verificado ao vivo · 401 sem token → 2xx com token (obtido no login) · rotas públicas e login intactos</span>
+    </div>
+    <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rota protegida</th><th>SEM token</th><th>COM token</th><th>Observação</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Projeto 1 — code-smells-project (decorator <code>auth_required</code>, token itsdangerous emitido no login)</td></tr>
+        <tr><td class="item"><code>POST /produtos</code></td><td><b>401</b> ✓</td><td><b>201</b> ✓</td><td class="ev">criação de produto</td></tr>
+        <tr><td class="item"><code>PUT /produtos/&lt;id&gt;</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev">atualização</td></tr>
+        <tr><td class="item"><code>DELETE /produtos/&lt;id&gt;</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev">exclusão</td></tr>
+        <tr><td class="item"><code>POST /pedidos</code></td><td><b>401</b> ✓</td><td><b>201</b> ✓</td><td class="ev">criação de pedido</td></tr>
+        <tr><td class="item"><code>GET /usuarios</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev">listagem de usuários (dado sensível)</td></tr>
+        <tr class="grp"><td colspan="4">Projeto 2 — ecommerce-api-legacy (<code>authMiddleware</code> sempre ligado; <code>POST /api/login</code> emite token via bcrypt)</td></tr>
+        <tr><td class="item"><code>GET /api/admin/financial-report</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev">relatório financeiro (era público)</td></tr>
+        <tr><td class="item"><code>DELETE /api/users/:id</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev">exclusão de usuário (era pública)</td></tr>
+        <tr class="grp"><td colspan="4">Projeto 3 — task-manager-api (decorators <code>@auth_required</code>/<code>@admin_required</code>, token assinado com role)</td></tr>
+        <tr><td class="item"><code>DELETE /tasks/&lt;id&gt;</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev"><code>@auth_required</code></td></tr>
+        <tr><td class="item"><code>DELETE /users/&lt;id&gt;</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev"><code>@admin_required</code> — token de não-admin → <b>403</b></td></tr>
+        <tr><td class="item"><code>DELETE /categories/&lt;id&gt;</code></td><td><b>401</b> ✓</td><td><b>200</b> ✓</td><td class="ev"><code>@auth_required</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="counts" style="margin-top:.5rem">Rotas públicas (checkout, leituras, <code>/login</code>, <code>/health</code>) permanecem abertas e respondendo. Auth <b>ligada por padrão</b> — não há flag que a desligue. Evidência de boot ao vivo nas portas 5055/3010/5056.</div>
+  </section>
 
   <!-- ============ PROJETO 1 ============ -->
   <section class="proj">

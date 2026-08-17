@@ -549,7 +549,7 @@ Para a Fase 3, o `references/refactoring-playbook.md` traz **15 padrões de tran
 | # | Desafio | Solução |
 |---|---|---|
 | 1 | A porta padrão 5000 no macOS é ocupada pelo AirPlay Receiver, quebrando a validação de boot da Fase 3. | A skill e a validação passaram a ler a porta de uma variável de ambiente (`PORT`), com fallback para 5000 — documentado nos `.env.example` de cada projeto. |
-| 2 | Tensão entre exigir autenticação (correto do ponto de vista de segurança) e o critério de aceite "endpoints continuam respondendo" — exigir auth faria os endpoints do baseline (sem token) retornarem 401. | A infraestrutura de autenticação (token assinado, `middlewares/auth.py`/`auth.js`) foi construída, mas deixada **não-obrigatória** por padrão nos endpoints herdados do baseline. Documentada como limitação aceita, priorizando não quebrar o contrato HTTP existente. |
+| 2 | Tensão entre exigir autenticação (correto de segurança) e o critério "endpoints continuam respondendo". **Na 1ª entrega isso foi resolvido errado:** a infra de auth foi construída mas deixada desligada por padrão (`ENFORCE_AUTH=0`; decorators não aplicados), e a entrega foi **reprovada** porque os findings CRITICAL/HIGH de auth continuavam reproduzíveis na app. | **Segurança vence contrato.** As rotas destrutivas/sensíveis dos findings (AP-05/AP-06) passam a exigir `Authorization` — **401 sem token, 2xx com token** — o que é a *correção* do finding, não uma quebra de contrato. A skill foi endurecida (Fase 3 + Validação exigem **provar** 401/2xx e proíbem infra desconectada) para impedir a recorrência; `/login` e as leituras seguem públicos. |
 | 3 | O banco `:memory:` do projeto 2 (Node) perde todo o estado a cada boot, e o baseline depende de dados de seed já existirem. | `db/init.js` roda o seed de forma transacional no boot da aplicação, antes de aceitar requisições. |
 | 4 | O projeto 3 já tinha uma pasta `services/` e `utils/helpers.py`, mas eram **camadas de fachada mortas** (nunca importadas, ou duplicando lógica que já existia nos models) — uma reescrita ingênua manteria o lixo ou apagaria trabalho útil. | A Fase 3 aplicou a regra de adaptação: absorveu os métodos de domínio já existentes nos models (ex.: `Task.is_overdue()`, `to_dict()`), removeu `services/` (código morto) e tornou `utils/helpers.py` a implementação canônica única. |
 
@@ -741,11 +741,14 @@ $ curl localhost:5055/produtos
 
 # Projeto 2 — boot
 {"level":"info","message":"db.init","seeded":true,"users":1,"courses":2}
-{"level":"info","message":"server.started","port":3010,"authEnforced":false}
+{"level":"info","message":"server.started","port":3010,"authEnforced":true}
 $ curl -X POST localhost:3010/api/checkout -d '{"usr":"Guilherme","eml":"gui@fullcycle.com.br","pwd":"senhaforte","c_id":2,"card":"4111222233334444"}'
-{"msg":"Sucesso","enrollment_id":2}                                 # HTTP 200 — sem PAN/segredo no log
-$ curl localhost:3010/api/admin/financial-report
-[{"course":"Clean Architecture","revenue":997,...}]                 # HTTP 200
+{"msg":"Sucesso","enrollment_id":2}                                 # HTTP 200 — checkout público, sem PAN/segredo no log
+$ curl localhost:3010/api/admin/financial-report                    # sem token
+{"error":"Não autenticado"}                                         # HTTP 401 — rota protegida (RP-12)
+$ TOKEN=$(curl -s -X POST localhost:3010/api/login -d '{"email":"leonan@fullcycle.com.br","password":"..."}' | jq -r .token)
+$ curl -H "Authorization: Bearer $TOKEN" localhost:3010/api/admin/financial-report
+[{"course":"Clean Architecture","revenue":997,...}]                 # HTTP 200 — com token
 
 # Projeto 3 — seed + boot
 INFO __main__: Seed concluído com sucesso! (3 usuários, 4 categorias, 10 tasks)   # sem DeprecationWarning
