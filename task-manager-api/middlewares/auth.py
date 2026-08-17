@@ -1,14 +1,18 @@
-"""Infraestrutura de autenticação (RP-12 / AP-05 / AP-06).
+"""Autenticação aplicada às rotas (RP-12 / AP-05 / AP-06).
 
-O /login agora emite um token REAL, assinado com a SECRET_KEY da Config
+O /login emite um token REAL, assinado com a SECRET_KEY da Config
 (itsdangerous — dependência do próprio Flask), com validade configurável e
 verificável por `verify_token()` / `@auth_required` / `@admin_required`.
 
-LIMITAÇÃO ACEITA (documentada, como nos Projetos 1 e 2): o contrato do
-baseline exercita DELETEs e rotas administrativas SEM header Authorization
-e espera sucesso (200). Exigir auth quebraria o contrato, portanto os
-decorators abaixo NÃO estão aplicados às rotas do baseline por padrão —
-a infraestrutura está pronta para ser ativada rota a rota:
+Os decorators estão LIGADOS por padrão nas rotas destrutivas (segurança
+vence contrato — sem `Authorization` elas retornam 401):
+
+    DELETE /tasks/<id>       -> @auth_required   (routes/task_routes.py)
+    DELETE /users/<id>       -> @admin_required  (routes/user_routes.py)
+    DELETE /categories/<id>  -> @auth_required   (routes/category_routes.py)
+
+Ordem correta: decorator de rota primeiro, decorator de auth logo abaixo,
+como no exemplo da RP-12:
 
     @task_bp.route('/tasks/<int:task_id>', methods=['DELETE'])
     @auth_required          # ou @admin_required

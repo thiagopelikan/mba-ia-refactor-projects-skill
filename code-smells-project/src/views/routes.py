@@ -6,6 +6,13 @@ Sem SQL, sem regra de negócio, sem efeitos colaterais.
 
 As rotas `/admin/query` (SQL arbitrário) e `/admin/reset-db` (destrutiva)
 do legado foram REMOVIDAS (RP-12) — respondem 404.
+
+Autenticação (RP-12, AP-06): as fábricas de rotas recebem o decorator
+`auth_required` (injetado pelo composition root) e o aplicam às rotas
+sensíveis marcadas na auditoria — `POST /produtos`, `PUT /produtos/<id>`,
+`DELETE /produtos/<id>`, `POST /pedidos` e `GET /usuarios` exigem
+`Authorization: Bearer <token>` (401 sem token). `POST /login` permanece
+público para emitir o token; leituras públicas de catálogo/health idem.
 """
 from flask import Blueprint, jsonify, request
 
@@ -16,7 +23,7 @@ def _json_body():
     return request.get_json(silent=True)
 
 
-def criar_rotas_produtos(controller):
+def criar_rotas_produtos(controller, auth_required):
     bp = Blueprint("produtos", __name__)
 
     @bp.get("/produtos")
@@ -35,16 +42,19 @@ def criar_rotas_produtos(controller):
         return jsonify(corpo), status
 
     @bp.post("/produtos")
+    @auth_required
     def criar_produto():
         corpo, status = controller.criar(_json_body())
         return jsonify(corpo), status
 
     @bp.put("/produtos/<int:produto_id>")
+    @auth_required
     def atualizar_produto(produto_id):
         corpo, status = controller.atualizar(produto_id, _json_body())
         return jsonify(corpo), status
 
     @bp.delete("/produtos/<int:produto_id>")
+    @auth_required
     def deletar_produto(produto_id):
         corpo, status = controller.deletar(produto_id)
         return jsonify(corpo), status
@@ -52,10 +62,11 @@ def criar_rotas_produtos(controller):
     return bp
 
 
-def criar_rotas_usuarios(controller):
+def criar_rotas_usuarios(controller, auth_required):
     bp = Blueprint("usuarios", __name__)
 
     @bp.get("/usuarios")
+    @auth_required
     def listar_usuarios():
         corpo, status = controller.listar()
         return jsonify(corpo), status
@@ -78,10 +89,11 @@ def criar_rotas_usuarios(controller):
     return bp
 
 
-def criar_rotas_pedidos(controller):
+def criar_rotas_pedidos(controller, auth_required):
     bp = Blueprint("pedidos", __name__)
 
     @bp.post("/pedidos")
+    @auth_required
     def criar_pedido():
         corpo, status = controller.criar(_json_body())
         return jsonify(corpo), status

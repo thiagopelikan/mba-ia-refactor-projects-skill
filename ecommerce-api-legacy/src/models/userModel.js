@@ -1,6 +1,8 @@
 /**
  * Model de usuários: único ponto de acesso à tabela users.
- * Serialização segura: o hash de senha nunca sai daqui (RP-04).
+ * Serialização segura (RP-04): o hash de senha só sai via
+ * findCredentialsByEmail (consumido exclusivamente pelo AuthService no
+ * login) — nunca em findByEmail nem em qualquer resposta HTTP.
  */
 class UserModel {
     constructor(db) {
@@ -9,6 +11,14 @@ class UserModel {
 
     findByEmail(email) {
         return this.db.get('SELECT id, name, email FROM users WHERE email = ?', [email]);
+    }
+
+    /**
+     * Uso restrito ao fluxo de login (AuthService): inclui o hash bcrypt
+     * para comparação de senha. Não usar para serializar usuário.
+     */
+    findCredentialsByEmail(email) {
+        return this.db.get('SELECT id, email, pass AS passwordHash FROM users WHERE email = ?', [email]);
     }
 
     async create({ name, email, passwordHash }) {

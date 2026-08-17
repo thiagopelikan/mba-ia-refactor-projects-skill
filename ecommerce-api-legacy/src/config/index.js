@@ -44,9 +44,8 @@ module.exports = {
         // Se vazio, o TokenService gera um secret efêmero por boot (tokens não sobrevivem a restart).
         tokenSecret: process.env.AUTH_TOKEN_SECRET || '',
         tokenTtlSeconds: integerFromEnv('AUTH_TOKEN_TTL_SECONDS', 3600),
-        // Limitação aceita (AP-06): infra de auth pronta, mas desligada por padrão para
-        // preservar o contrato do baseline (report e delete respondem 200 sem credencial).
-        enforce: process.env.ENFORCE_AUTH === '1',
+        // Auth SEMPRE ligada (RP-12): /api/admin/* e DELETE /api/users/:id exigem
+        // Bearer token obtido em POST /api/login. Não há flag para desligar.
     },
 
     seed: {

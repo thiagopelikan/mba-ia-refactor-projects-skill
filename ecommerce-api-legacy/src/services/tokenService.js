@@ -1,7 +1,7 @@
 /**
- * Infra de auth (AP-06): emissão/verificação de token assinado (HMAC-SHA256)
- * com expiração. Pronta para uso pelo middleware de auth; NÃO aplicada às
- * rotas do baseline por padrão (limitação aceita — preservação de contrato).
+ * Infra de auth (RP-12): emissão/verificação de token assinado (HMAC-SHA256)
+ * com expiração. Emitido por POST /api/login e verificado pelo middleware de
+ * auth, aplicado por padrão às rotas sensíveis/destrutivas.
  */
 const crypto = require('crypto');
 

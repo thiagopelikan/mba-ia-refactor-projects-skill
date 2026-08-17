@@ -1,7 +1,11 @@
-"""Rotas de tasks — finas: parsing de request e delegação ao controller."""
+"""Rotas de tasks — finas: parsing de request e delegação ao controller.
+
+Rotas destrutivas protegidas por @auth_required (RP-12 / AP-05).
+"""
 from flask import Blueprint, jsonify, request
 
 from controllers import task_controller
+from middlewares.auth import auth_required
 
 task_bp = Blueprint('tasks', __name__)
 
@@ -31,6 +35,7 @@ def update_task(task_id):
 
 
 @task_bp.route('/tasks/<int:task_id>', methods=['DELETE'])
+@auth_required
 def delete_task(task_id):
     body, status = task_controller.delete_task(task_id)
     return jsonify(body), status

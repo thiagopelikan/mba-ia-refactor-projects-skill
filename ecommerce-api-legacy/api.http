@@ -24,8 +24,20 @@ Content-Type: application/json
   "card": "5111222233334444"
 }
 
-### Relatório financeiro administrativo
-GET {{baseUrl}}/api/admin/financial-report
+### Login (obter Bearer token) — senha do seed vem de SEED_USER_PASSWORD
+# @name login
+POST {{baseUrl}}/api/login
+Content-Type: application/json
 
-### Deletar usuário
+{
+  "email": "leonan@fullcycle.com.br",
+  "password": "troque-pela-SEED_USER_PASSWORD"
+}
+
+### Relatório financeiro administrativo (exige auth — 401 sem token)
+GET {{baseUrl}}/api/admin/financial-report
+Authorization: Bearer {{login.response.body.token}}
+
+### Deletar usuário (exige auth — 401 sem token)
 DELETE {{baseUrl}}/api/users/1
+Authorization: Bearer {{login.response.body.token}}

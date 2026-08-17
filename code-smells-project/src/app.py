@@ -18,6 +18,7 @@ from src.controllers.health_controller import HealthController
 from src.controllers.pedido_controller import PedidoController
 from src.controllers.produto_controller import ProdutoController
 from src.controllers.usuario_controller import UsuarioController
+from src.middlewares.auth import criar_auth_required
 from src.middlewares.error_handler import register_error_handlers
 from src.models.pedido_model import PedidoModel
 from src.models.produto_model import ProdutoModel
@@ -66,6 +67,10 @@ def create_app(settings=None):
     notificador = Notificador()
     token_service = TokenService(settings.secret_key)
 
+    # Middleware de auth (RP-12): decorator com o TokenService injetado,
+    # aplicado às rotas sensíveis (AP-05/AP-06). Sempre ligado — sem flag.
+    auth_required = criar_auth_required(token_service)
+
     # Controllers.
     produto_controller = ProdutoController(produto_model)
     usuario_controller = UsuarioController(usuario_model, token_service)
@@ -74,9 +79,9 @@ def create_app(settings=None):
 
     # Rotas + middlewares.
     app.register_blueprint(criar_rotas_sistema(health_controller))
-    app.register_blueprint(criar_rotas_produtos(produto_controller))
-    app.register_blueprint(criar_rotas_usuarios(usuario_controller))
-    app.register_blueprint(criar_rotas_pedidos(pedido_controller))
+    app.register_blueprint(criar_rotas_produtos(produto_controller, auth_required))
+    app.register_blueprint(criar_rotas_usuarios(usuario_controller, auth_required))
+    app.register_blueprint(criar_rotas_pedidos(pedido_controller, auth_required))
     register_error_handlers(app)
 
     return app

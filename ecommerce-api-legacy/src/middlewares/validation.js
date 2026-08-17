@@ -55,6 +55,21 @@ function validateCheckout(req, res, next) {
     return next();
 }
 
+function validateLogin(req, res, next) {
+    const body = req.body || {};
+    const { email, password } = body;
+
+    if (!isNonEmptyString(email) || !EMAIL_PATTERN.test(email.trim())) {
+        return next(new ValidationError("campo 'email' é obrigatório e deve ser um email válido"));
+    }
+    if (!isNonEmptyString(password)) {
+        return next(new ValidationError("campo 'password' é obrigatório e deve ser texto"));
+    }
+
+    req.loginInput = { email: email.trim(), password };
+    return next();
+}
+
 function validateUserIdParam(req, res, next) {
     const userId = parsePositiveInteger(req.params.id);
     if (userId === null) {
@@ -64,4 +79,4 @@ function validateUserIdParam(req, res, next) {
     return next();
 }
 
-module.exports = { validateCheckout, validateUserIdParam };
+module.exports = { validateCheckout, validateLogin, validateUserIdParam };

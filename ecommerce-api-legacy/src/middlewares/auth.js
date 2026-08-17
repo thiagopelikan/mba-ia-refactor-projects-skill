@@ -1,8 +1,8 @@
 /**
- * Middleware de autenticação (AP-06 — infra pronta): verifica Bearer token
- * via TokenService. NÃO é aplicado às rotas do baseline por padrão
- * (ENFORCE_AUTH=0) — exigi-lo mudaria os status de contrato (200 → 401).
- * Limitação aceita e documentada; ligar com ENFORCE_AUTH=1.
+ * Middleware de autenticação (RP-12, corrige AP-05/AP-06): verifica Bearer
+ * token via TokenService. Aplicado SEMPRE (sem flag de desligar) às rotas
+ * sensíveis/destrutivas: /api/admin/* e DELETE /api/users/:id.
+ * Sem token ou token inválido → 401. Token obtido em POST /api/login.
  */
 const { AuthError } = require('../errors');
 
