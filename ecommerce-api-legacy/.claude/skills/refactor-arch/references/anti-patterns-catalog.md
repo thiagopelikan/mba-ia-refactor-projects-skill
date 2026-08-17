@@ -60,6 +60,7 @@ Distribuição: 5 CRITICAL · 5 HIGH · 4 MEDIUM · 2 LOW.
   - uso de `eval()`/`exec()`/`Function()` sobre input externo;
   - endpoints destrutivos sem nenhuma verificação de autenticação: `/admin/reset-db` que dá DROP/DELETE em tabelas, `DELETE /recurso/<id>` aberto ao público.
 - **Por que é problema:** qualquer cliente anônimo pode executar comandos arbitrários ou destruir o banco inteiro com uma única requisição.
+- **Remediação (RP-12) tem de ser viva:** SQL arbitrário → **remover**; rota destrutiva legítima → auth **aplicada à rota** e verificada (401 sem token). Infra de auth desconectada (decorator não aplicado, flag desligada por padrão) **não** corrige o finding — a Fase 3 valida 401 sem token e 2xx com token.
 - **Stacks aplicáveis:** todas.
 
 ## AP-06 — Missing Authentication / Authorization
@@ -70,6 +71,7 @@ Distribuição: 5 CRITICAL · 5 HIGH · 4 MEDIUM · 2 LOW.
   - "token" previsível/sem assinatura: `f"fake-jwt-token-{user_id}"`, token = id do usuário, token nunca verificado nas rotas seguintes;
   - login que responde sucesso sem criar sessão/token verificável.
 - **Por que é problema:** qualquer usuário (ou não-usuário) acessa ou modifica dados de outros; o "token" pode ser forjado trivialmente.
+- **Remediação (RP-12) tem de ser viva:** token assinado/verificável + middleware/decorator **aplicado às rotas sensíveis por padrão** (não atrás de flag desligada, não só declarado). A Fase 3 valida 401 sem token e 2xx com token em cada rota apontada.
 - **Stacks aplicáveis:** todas.
 
 ## AP-07 — Business Logic in Controller/Route

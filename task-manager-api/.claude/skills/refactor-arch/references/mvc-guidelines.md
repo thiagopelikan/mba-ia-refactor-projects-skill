@@ -35,7 +35,7 @@ Estrutura-alvo que a Fase 3 cria. As camadas são: **Config**, **Models**, **Vie
 ### Middlewares (`middlewares/`)
 
 - **Error handling centralizado** (`middlewares/error_handler.py` | `middlewares/errorHandler.js`): um único ponto converte exceções em respostas HTTP consistentes (400/404/500 com JSON padronizado), sem vazar stack trace.
-- Autenticação/autorização (`middlewares/auth.py` | `middlewares/auth.js`): verificação de token aplicada às rotas protegidas.
+- Autenticação/autorização (`middlewares/auth.py` | `middlewares/auth.js`): verificação de token **efetivamente aplicada** às rotas destrutivas/sensíveis apontadas na auditoria (AP-05/AP-06), **ligada por padrão**. Infra declarada mas não aplicada (decorator não usado, `router.use(auth)` atrás de flag desligada como `ENFORCE_AUTH=0`) **não** conta como proteção — o finding continua vivo.
 - Outros transversais: logging estruturado, CORS restrito, rate limiting.
 
 ### Entry point / Composition root (`app.py` | `app.js`)

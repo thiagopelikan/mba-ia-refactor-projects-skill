@@ -569,6 +569,7 @@ module.exports = (req, res, next) => {
 ```
 
 - **Notas:** decisão por rota perigosa: **remover** (SQL arbitrário) ou **proteger** (admin/destrutivas legítimas). Se adicionar `PyJWT`/`jsonwebtoken` não for viável no projeto, o mínimo é token aleatório (`secrets.token_urlsafe`) armazenado server-side e **verificado** em toda rota protegida — nunca `fake-jwt-token-{id}`. Endpoints protegidos continuam existindo (contrato preservado); apenas passam a exigir auth. Registre no relatório final qualquer mudança de comportamento (ex.: rota removida).
+- **Aplicação é OBRIGATÓRIA, não opcional.** O middleware/decorator tem de ficar **efetivamente ligado** às rotas destrutivas/sensíveis dos findings AP-05/AP-06, ligado **por padrão**. Reprovam a Fase 3, porque deixam o CRITICAL/HIGH reproduzível na app como ela sobe: (a) decorator declarado mas **não aplicado** à rota; (b) `router.use(auth)`/registro condicionado a uma **flag desligada por padrão** (`ENFORCE_AUTH=0`); (c) comentário do tipo "não aplicado ao baseline". A validação da Fase 3 **precisa provar** `401` sem token e `2xx` com token em cada uma dessas rotas — não basta a infra existir no código.
 
 ## RP-13 — Converter callbacks aninhados para async/await (Node)
 
